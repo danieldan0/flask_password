@@ -1,0 +1,7 @@
+Hi,
+
+Thanks for registering. Please open the following link to activate your account:
+
+{{ activate_url }}
+
+If you didn't register, ignore this email.
