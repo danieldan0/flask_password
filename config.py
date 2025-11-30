@@ -14,3 +14,6 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or 'noreply@example.com'
+    # Failed login / lockout policy
+    MAX_FAILED_LOGIN_ATTEMPTS = int(os.environ.get('MAX_FAILED_LOGIN_ATTEMPTS') or 5)
+    ACCOUNT_LOCKOUT_SECONDS = int(os.environ.get('ACCOUNT_LOCKOUT_SECONDS') or 15)

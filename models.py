@@ -12,5 +12,7 @@ class User(db.Model, UserMixin):
     twofa_enabled = db.Column(db.Boolean, default=False)
     twofa_secret = db.Column(db.String(32))
 
+    lockout_until = db.Column(db.DateTime, nullable=True)
+
     def __repr__(self):
         return f"<User {self.email}>"

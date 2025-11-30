@@ -1,5 +1,6 @@
 from flask import Flask, redirect, render_template, flash, url_for
 from flask_login import current_user, login_user
+from datetime import datetime, timedelta
 from config import Config
 from extensions import db, login_manager, mail
 from flask_mail import Message
@@ -7,6 +8,7 @@ from models import User
 from forms import RegisterForm, LoginForm
 import bcrypt
 from util.tokens import generate_confirmation_token, confirm_token
+from util.auth_logging import init_auth_logger, log_login_attempt
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -14,6 +16,7 @@ db.init_app(app)
 login_manager.init_app(app)
 setattr(login_manager, "login_view", "login")
 mail.init_app(app)
+init_auth_logger()
 
 
 @login_manager.user_loader
@@ -37,14 +40,43 @@ def login():
         user = User.query.filter_by(email=form.email.data).first()
         if not user:
             flash("Email not found, please register first")
+            log_login_attempt("no_such_user", form.email.data)
             return redirect("/register")
+
+        now = datetime.utcnow()
+        if getattr(user, 'lockout_until', None) and user.lockout_until > now:
+            remaining = int((user.lockout_until - now).total_seconds())
+            flash(f'Account locked due to too many failed login attempts. Try again in {remaining} seconds.', 'danger')
+            log_login_attempt("locked", form.email.data)
+            return render_template('login.html', form=form)
+
         password_bytes = (form.password.data or "").encode("utf-8")
         stored_hash = (user.password_hash or "").encode("utf-8")
         if not bcrypt.checkpw(password_bytes, stored_hash):
-            flash("Invalid password")
-            return render_template("login.html", form=form)
+            user.failed_attempts = (user.failed_attempts or 0) + 1
+            max_attempts = app.config.get('MAX_FAILED_LOGIN_ATTEMPTS', 5)
+            if user.failed_attempts >= max_attempts:
+                lock_seconds = app.config.get('ACCOUNT_LOCKOUT_SECONDS', 300)
+                user.lockout_until = datetime.utcnow() + timedelta(seconds=lock_seconds)
+                user.failed_attempts = 0
+                db.session.add(user)
+                db.session.commit()
+                flash(f'Account locked due to too many failed login attempts. Try again in {lock_seconds} seconds.', 'danger')
+                log_login_attempt("locked", form.email.data)
+                return render_template('login.html', form=form)
+            db.session.add(user)
+            db.session.commit()
+            flash('Invalid password', 'danger')
+            log_login_attempt("bad_password", form.email.data)
+            return render_template('login.html', form=form)
+
+        user.failed_attempts = 0
+        user.lockout_until = None
+        db.session.add(user)
+        db.session.commit()
         login_user(user)
         flash("Logged in successfully!")
+        log_login_attempt("success", form.email.data)
         return redirect("/profile")
     return render_template("login.html", form=form)
 
