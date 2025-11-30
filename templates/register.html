@@ -35,6 +35,13 @@
                     {% endif %}
                 </div>
 
+                <div class="mb-3">
+                    {{ form.recaptcha }}
+                    {% if form.recaptcha.errors %}
+                        <div class="text-danger small">{{ form.recaptcha.errors[0] }}</div>
+                    {% endif %}
+                </div>
+
                 <button type="submit" class="btn btn-primary">
                     {{ form.submit.label.text if form.submit is defined else "Register" }}
                 </button>
