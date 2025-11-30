@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Profile - {{ user.username }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-body text-center">
+                    <img src="{{ user.avatar_url or url_for('static', filename='images/default-avatar.png') }}"
+                             alt="{{ user.username }} avatar"
+                             class="rounded-circle mb-3"
+                             style="width:120px;height:120px;object-fit:cover;">
+                    <h4 class="card-title mb-0">{{ user.username }}</h4>
+                    {% if user.full_name %}
+                        <div class="text-muted small">{{ user.full_name }}</div>
+                    {% endif %}
+                    <p class="mt-2"><small class="text-muted">{{ user.email }}</small></p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    Account
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item">
+                        Status
+                        <span class="float-end">
+                            {% if user.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+                        </span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-header">
+                    About
+                </div>
+                <div class="card-body">
+                    <p>Test</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
