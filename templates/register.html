@@ -45,6 +45,7 @@
                 <button type="submit" class="btn btn-primary">
                     {{ form.submit.label.text if form.submit is defined else "Register" }}
                 </button>
+                <a href="{{ url_for('oauth_login', provider='google') }}" class="btn btn-danger w-100 mt-2">Register with Google</a>
             </form>
 
             <p class="mt-3 small">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>

@@ -2,7 +2,7 @@ from flask import Flask, redirect, render_template, flash, url_for, session, req
 from flask_login import current_user, login_user, login_required
 from datetime import datetime, timedelta
 from config import Config
-from extensions import db, login_manager, mail
+from extensions import db, login_manager, mail, oauth
 from flask_mail import Message
 from models import User
 from forms import RegisterForm, LoginForm
@@ -21,6 +21,7 @@ db.init_app(app)
 login_manager.init_app(app)
 setattr(login_manager, "login_view", "login")
 mail.init_app(app)
+oauth.init_app(app)
 init_auth_logger()
 
 
@@ -57,7 +58,7 @@ def login():
 
         password_bytes = (form.password.data or "").encode("utf-8")
         stored_hash = (user.password_hash or "").encode("utf-8")
-        if not bcrypt.checkpw(password_bytes, stored_hash):
+        if not stored_hash or not bcrypt.checkpw(password_bytes, stored_hash):
             user.failed_attempts = (user.failed_attempts or 0) + 1
             max_attempts = app.config.get('MAX_FAILED_LOGIN_ATTEMPTS', 5)
             if user.failed_attempts >= max_attempts:
@@ -198,6 +199,68 @@ def twofactor_disable():
     db.session.add(current_user)
     db.session.commit()
     flash('Two-factor authentication disabled.', 'success')
+    return redirect(url_for('profile'))
+
+@app.route('/oauth/<provider>')
+def oauth_login(provider):
+    if provider not in app.config.get('OAUTH_CREDENTIALS', {}):
+        flash('Unsupported OAuth provider.', 'danger')
+        return redirect(url_for('login'))
+
+    oauth_provider = app.config['OAUTH_CREDENTIALS'][provider]
+    oauth_client = oauth.register(
+        name=provider,
+        client_id=oauth_provider['client_id'],
+        client_secret=oauth_provider['client_secret'],
+        authorize_url=oauth_provider['authorize_url'],
+        access_token_url=oauth_provider['access_token_url'],
+        server_metadata_url=oauth_provider['server_metadata_url'],
+        client_kwargs={'scope': oauth_provider['scope']}
+    )
+
+    redirect_uri = url_for('oauth_callback', provider=provider, _external=True)
+    return oauth_client.authorize_redirect(redirect_uri)
+
+@app.route('/oauth/<provider>/callback')
+def oauth_callback(provider):
+    if provider not in app.config.get('OAUTH_CREDENTIALS', {}):
+        flash('Unsupported OAuth provider.', 'danger')
+        return redirect(url_for('login'))
+
+    oauth_provider = app.config['OAUTH_CREDENTIALS'][provider]
+    oauth_client = oauth.create_client(provider)
+
+    token = oauth_client.authorize_access_token()
+    user_info = oauth_client.get(oauth_provider['userinfo_endpoint']).json()
+
+    oauth_id = user_info.get('sub') or user_info.get('id')
+    email = user_info.get('email')
+
+    if not oauth_id or not email:
+        flash('Failed to retrieve user information from OAuth provider.', 'danger')
+        return redirect(url_for('login'))
+
+    user = User.query.filter_by(oauth_provider=provider, oauth_id=oauth_id).first()
+    if not user:
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            user = User()
+            user.email = email
+            user.password_hash = ''
+            user.is_active_account = True
+        user.oauth_provider = provider
+        user.oauth_id = oauth_id
+        db.session.add(user)
+        db.session.commit()
+
+    if getattr(user, 'twofa_enabled', False) and user.twofa_secret:
+        session['pre_2fa_userid'] = user.id
+        flash('Two-factor authentication required. Enter your code.', 'info')
+        return redirect(url_for('twofactor_verify'))
+
+    login_user(user)
+    flash('Logged in successfully via OAuth!')
+    log_login_attempt('success_oauth', email)
     return redirect(url_for('profile'))
 
 @app.route('/activate/<token>')

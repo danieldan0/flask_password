@@ -14,5 +14,8 @@ class User(db.Model, UserMixin):
 
     lockout_until = db.Column(db.DateTime, nullable=True)
 
+    oauth_provider = db.Column(db.String(50), nullable=True)
+    oauth_id = db.Column(db.String(100), nullable=True)
+
     def __repr__(self):
         return f"<User {self.email}>"

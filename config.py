@@ -18,3 +18,14 @@ class Config:
     # Failed login / lockout policy
     MAX_FAILED_LOGIN_ATTEMPTS = int(os.environ.get('MAX_FAILED_LOGIN_ATTEMPTS') or 5)
     ACCOUNT_LOCKOUT_SECONDS = int(os.environ.get('ACCOUNT_LOCKOUT_SECONDS') or 15)
+    OAUTH_CREDENTIALS = {
+        'google': {
+            'client_id': os.environ.get('GOOGLE_CLIENT_ID') or 'your-google-client-id',
+            'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET') or 'your-google-client-secret',
+            'authorize_url': 'https://accounts.google.com/o/oauth2/v2/auth',
+            'access_token_url': 'https://oauth2.googleapis.com/token',
+            'userinfo_endpoint': 'https://openidconnect.googleapis.com/v1/userinfo',
+            'scope': 'openid email profile',
+            'server_metadata_url': 'https://accounts.google.com/.well-known/openid-configuration'
+        }
+    }
