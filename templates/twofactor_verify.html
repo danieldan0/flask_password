@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Two-Factor Verification{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <h4 class="card-title">Two-Factor Verification</h4>
+    <p>Enter the 6-digit code from your authenticator app.</p>
+
+    <form method="post">
+      <div class="mb-3">
+        <label for="token" class="form-label">Verification code</label>
+        <input id="token" name="token" class="form-control" required maxlength="6" />
+      </div>
+
+      <button class="btn btn-primary" type="submit">Verify</button>
+      <a class="btn btn-secondary ms-2" href="{{ url_for('login') }}">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

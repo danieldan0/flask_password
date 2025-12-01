@@ -1,5 +1,5 @@
-from flask import Flask, redirect, render_template, flash, url_for
-from flask_login import current_user, login_user
+from flask import Flask, redirect, render_template, flash, url_for, session, request
+from flask_login import current_user, login_user, login_required
 from datetime import datetime, timedelta
 from config import Config
 from extensions import db, login_manager, mail
@@ -9,6 +9,11 @@ from forms import RegisterForm, LoginForm
 import bcrypt
 from util.tokens import generate_confirmation_token, confirm_token
 from util.auth_logging import init_auth_logger, log_login_attempt
+from util.twofa import generate_secret, get_provisioning_uri, verify_totp
+import urllib.parse
+import qrcode
+import io
+import base64
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -74,6 +79,12 @@ def login():
         user.lockout_until = None
         db.session.add(user)
         db.session.commit()
+
+        if getattr(user, 'twofa_enabled', False) and user.twofa_secret:
+            session['pre_2fa_userid'] = user.id
+            flash('Two-factor authentication required. Enter your code.', 'info')
+            return redirect(url_for('twofactor_verify'))
+
         login_user(user)
         flash("Logged in successfully!")
         log_login_attempt("success", form.email.data)
@@ -119,6 +130,75 @@ def register():
 def profile():
     return render_template("profile.html", user=current_user)
 
+
+@app.route('/twofactor/setup', methods=['GET', 'POST'])
+@login_required
+def twofactor_setup():
+    if request.method == 'POST':
+        token = (request.form.get('token') or '').strip()
+        temp_secret = session.get('twofa_temp_secret')
+        if not temp_secret:
+            flash('2FA setup session expired. Please try again.', 'danger')
+            return redirect(url_for('profile'))
+        if verify_totp(temp_secret, token):
+            current_user.twofa_secret = temp_secret
+            current_user.twofa_enabled = True
+            db.session.add(current_user)
+            db.session.commit()
+            session.pop('twofa_temp_secret', None)
+            flash('Two-factor authentication enabled.', 'success')
+            return redirect(url_for('profile'))
+        flash('Invalid verification code. Please try again.', 'danger')
+
+    temp_secret = generate_secret()
+    session['twofa_temp_secret'] = temp_secret
+    provisioning_uri = get_provisioning_uri(temp_secret, current_user.email, issuer_name=app.config.get('APP_NAME'))
+
+    try:
+        qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M)
+        qr.add_data(provisioning_uri)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        b64 = base64.b64encode(buf.read()).decode('ascii')
+        qr_data = f"data:image/png;base64,{b64}"
+    except Exception:
+        # Fallback: use external chart service
+        encoded = urllib.parse.quote_plus(provisioning_uri)
+        qr_data = f"https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl={encoded}"
+
+    return render_template('twofactor_setup.html', qr_data=qr_data, secret=temp_secret)
+
+
+@app.route('/twofactor/verify', methods=['GET', 'POST'])
+def twofactor_verify():
+    pre_id = session.get('pre_2fa_userid')
+    if not pre_id:
+        return redirect(url_for('login'))
+    user = User.query.get(pre_id)
+    if request.method == 'POST':
+        token = (request.form.get('token') or '').strip()
+        if user and user.twofa_secret and verify_totp(user.twofa_secret, token):
+            session.pop('pre_2fa_userid', None)
+            login_user(user)
+            flash('Two-factor authentication successful.', 'success')
+            log_login_attempt('success_2fa', user.email)
+            return redirect(url_for('profile'))
+        flash('Invalid two-factor code.', 'danger')
+        log_login_attempt('bad_2fa', user.email if user else None)
+    return render_template('twofactor_verify.html')
+
+@app.route('/twofactor/disable', methods=['GET', 'POST'])
+@login_required
+def twofactor_disable():
+    current_user.twofa_secret = None
+    current_user.twofa_enabled = False
+    db.session.add(current_user)
+    db.session.commit()
+    flash('Two-factor authentication disabled.', 'success')
+    return redirect(url_for('profile'))
 
 @app.route('/activate/<token>')
 def activate(token):
