@@ -1,6 +1,6 @@
 from flask import Flask, redirect, render_template, flash, url_for, session, request
 from flask_login import current_user, login_user, login_required
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from config import Config
 from extensions import db, login_manager, mail, oauth
 from flask_mail import Message
@@ -49,7 +49,7 @@ def login():
             log_login_attempt("no_such_user", form.email.data)
             return redirect("/register")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if getattr(user, 'lockout_until', None) and user.lockout_until > now:
             remaining = int((user.lockout_until - now).total_seconds())
             flash(f'Account locked due to too many failed login attempts. Try again in {remaining} seconds.', 'danger')
@@ -63,7 +63,7 @@ def login():
             max_attempts = app.config.get('MAX_FAILED_LOGIN_ATTEMPTS', 5)
             if user.failed_attempts >= max_attempts:
                 lock_seconds = app.config.get('ACCOUNT_LOCKOUT_SECONDS', 300)
-                user.lockout_until = datetime.utcnow() + timedelta(seconds=lock_seconds)
+                user.lockout_until = datetime.now(timezone.utc) + timedelta(seconds=lock_seconds)
                 user.failed_attempts = 0
                 db.session.add(user)
                 db.session.commit()

@@ -35,7 +35,7 @@ def log_login_attempt(result: str, email: str | None = None):
     init_auth_logger()
     logger = logging.getLogger('auth')
 
-    ts = datetime.datetime.utcnow().isoformat() + 'Z'
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat() + 'Z'
     ip = _get_client_ip() or ''
     email_val = email or ''
 
